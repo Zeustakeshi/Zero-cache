@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from zerocache import ZeroCache
 
 
@@ -15,7 +14,7 @@ class TestSaddSrem:
     def test_sadd_duplicate_not_counted(self, cache: ZeroCache):
         cache.sadd("s", "a", "b")
         result = cache.sadd("s", "b", "c")
-        assert result == 1   # only "c" is new
+        assert result == 1  # only "c" is new
         assert cache.smembers("s") == {"a", "b", "c"}
 
     def test_srem_existing(self, cache: ZeroCache):

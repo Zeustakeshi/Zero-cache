@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-from pathlib import Path
 from zerocache import ZeroCache
 
 
@@ -26,6 +24,7 @@ class TestSaveLoad:
 
     def test_save_skips_expired_keys(self, tmp_path):
         import time
+
         db_path = str(tmp_path / "test.db")
 
         c1 = ZeroCache(persist_path=db_path, load_on_start=False, auto_save_interval=9999)

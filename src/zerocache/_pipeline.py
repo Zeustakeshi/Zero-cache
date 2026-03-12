@@ -20,7 +20,7 @@ Example::
 from __future__ import annotations
 
 import asyncio
-from typing import Any, List, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from zerocache._core import ZeroCache
@@ -38,61 +38,61 @@ class Pipeline:
         cache: The :class:`ZeroCache` instance to execute commands on.
     """
 
-    def __init__(self, cache: "ZeroCache") -> None:
-        self._c    = cache
-        self._cmds: List[Tuple[str, tuple, dict]] = []
+    def __init__(self, cache: ZeroCache) -> None:
+        self._c = cache
+        self._cmds: list[tuple[str, tuple, dict]] = []
 
-    def _q(self, method: str, *args: Any, **kwargs: Any) -> "Pipeline":
+    def _q(self, method: str, *args: Any, **kwargs: Any) -> Pipeline:
         self._cmds.append((method, args, kwargs))
         return self
 
     # ── command builders ───────────────────────────────────────────────
 
-    def set   (self, k: str, v: Any, ttl: int = 0, **kw: Any) -> "Pipeline":
+    def set(self, k: str, v: Any, ttl: int = 0, **kw: Any) -> Pipeline:
         return self._q("set", k, v, ttl=ttl, **kw)
 
-    def get   (self, k: str) -> "Pipeline":
+    def get(self, k: str) -> Pipeline:
         return self._q("get", k)
 
-    def delete(self, *k: str) -> "Pipeline":
+    def delete(self, *k: str) -> Pipeline:
         return self._q("delete", *k)
 
-    def incr  (self, k: str, n: int = 1) -> "Pipeline":
+    def incr(self, k: str, n: int = 1) -> Pipeline:
         return self._q("incr", k, n)
 
-    def hset  (self, k: str, f: str, v: Any) -> "Pipeline":
+    def hset(self, k: str, f: str, v: Any) -> Pipeline:
         return self._q("hset", k, f, v)
 
-    def hget  (self, k: str, f: str) -> "Pipeline":
+    def hget(self, k: str, f: str) -> Pipeline:
         return self._q("hget", k, f)
 
-    def lpush (self, k: str, *v: Any) -> "Pipeline":
+    def lpush(self, k: str, *v: Any) -> Pipeline:
         return self._q("lpush", k, *v)
 
-    def rpush (self, k: str, *v: Any) -> "Pipeline":
+    def rpush(self, k: str, *v: Any) -> Pipeline:
         return self._q("rpush", k, *v)
 
-    def sadd  (self, k: str, *v: Any) -> "Pipeline":
+    def sadd(self, k: str, *v: Any) -> Pipeline:
         return self._q("sadd", k, *v)
 
-    def zadd  (self, k: str, m: dict) -> "Pipeline":
+    def zadd(self, k: str, m: dict) -> Pipeline:
         return self._q("zadd", k, m)
 
-    def expire(self, k: str, t: int) -> "Pipeline":
+    def expire(self, k: str, t: int) -> Pipeline:
         return self._q("expire", k, t)
 
-    def mset  (self, mapping: dict, ttl: int = 0) -> "Pipeline":
+    def mset(self, mapping: dict, ttl: int = 0) -> Pipeline:
         return self._q("mset", mapping, ttl=ttl)
 
     # ── execution ──────────────────────────────────────────────────────
 
-    def execute(self) -> List[Any]:
+    def execute(self) -> list[Any]:
         """Run all queued commands and return their results as a list."""
         results = [getattr(self._c, m)(*a, **kw) for m, a, kw in self._cmds]
         self._cmds.clear()
         return results
 
-    async def async_execute(self) -> List[Any]:
+    async def async_execute(self) -> list[Any]:
         """Async variant — offloads execution to thread pool."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.execute)

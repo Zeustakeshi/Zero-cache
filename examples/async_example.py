@@ -6,6 +6,7 @@ all running inside an asyncio event loop.
 """
 
 import asyncio
+
 from zerocache import ZeroCache, cached
 
 
@@ -43,7 +44,7 @@ async def cached_decorator_example():
     print(f"Fetched: {user} (call #{call_count})")
 
     cached_user = await fetch_user(42)
-    print(f"Cached:  {cached_user} (call #{call_count})")   # still 1
+    print(f"Cached:  {cached_user} (call #{call_count})")  # still 1
 
     cache.shutdown()
 

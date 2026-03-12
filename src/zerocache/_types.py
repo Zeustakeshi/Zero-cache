@@ -11,8 +11,8 @@ IntEnum vs plain string:
 
 from __future__ import annotations
 
-from enum  import IntEnum
-from typing import Any, Dict, TYPE_CHECKING
+from enum import IntEnum
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
@@ -24,20 +24,20 @@ class DataType(IntEnum):
     """Enumeration of supported cache value types."""
 
     STRING = 1
-    HASH   = 2
-    LIST   = 3
-    SET    = 4
-    ZSET   = 5
+    HASH = 2
+    LIST = 3
+    SET = 4
+    ZSET = 5
 
     def __str__(self) -> str:
-        return self.name.lower()   # keeps Redis-style string representation
+        return self.name.lower()  # keeps Redis-style string representation
 
 
 # Resolve built-in container types in O(1) without chained isinstance()
-_TYPE_MAP: Dict[type, DataType] = {
+_TYPE_MAP: dict[type, DataType] = {
     dict: DataType.HASH,
     list: DataType.LIST,
-    set:  DataType.SET,
+    set: DataType.SET,
 }
 
 

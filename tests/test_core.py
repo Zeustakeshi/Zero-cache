@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-import pytest
+
 from zerocache import ZeroCache
 
 
@@ -40,14 +40,14 @@ class TestSetGet:
         assert cache.get("k") is None
 
     def test_set_various_types(self, cache: ZeroCache):
-        cache.set("int",   42)
+        cache.set("int", 42)
         cache.set("float", 3.14)
-        cache.set("list",  [1, 2, 3])
-        cache.set("dict",  {"a": 1})
-        assert cache.get("int")   == 42
+        cache.set("list", [1, 2, 3])
+        cache.set("dict", {"a": 1})
+        assert cache.get("int") == 42
         assert cache.get("float") == 3.14
-        assert cache.get("list")  == [1, 2, 3]
-        assert cache.get("dict")  == {"a": 1}
+        assert cache.get("list") == [1, 2, 3]
+        assert cache.get("dict") == {"a": 1}
 
 
 class TestDelete:
@@ -60,7 +60,8 @@ class TestDelete:
         assert cache.delete("nope") == 0
 
     def test_delete_multiple(self, cache: ZeroCache):
-        cache.set("a", 1); cache.set("b", 2)
+        cache.set("a", 1)
+        cache.set("b", 2)
         assert cache.delete("a", "b", "nope") == 2
 
 
@@ -73,7 +74,8 @@ class TestExists:
         assert cache.exists("nope") == 0
 
     def test_exists_multiple(self, cache: ZeroCache):
-        cache.set("a", 1); cache.set("b", 2)
+        cache.set("a", 1)
+        cache.set("b", 2)
         assert cache.exists("a", "b", "nope") == 2
 
     def test_contains_operator(self, cache: ZeroCache):
@@ -142,22 +144,27 @@ class TestType:
 
 class TestFlushKeysRename:
     def test_flush_clears_all(self, cache: ZeroCache):
-        cache.set("a", 1); cache.set("b", 2)
+        cache.set("a", 1)
+        cache.set("b", 2)
         cache.flush()
         assert len(cache) == 0
 
     def test_keys_all(self, cache: ZeroCache):
-        cache.set("foo", 1); cache.set("bar", 2)
+        cache.set("foo", 1)
+        cache.set("bar", 2)
         ks = cache.keys()
         assert set(ks) == {"foo", "bar"}
 
     def test_keys_pattern(self, cache: ZeroCache):
-        cache.set("user:1", 1); cache.set("user:2", 2); cache.set("item:1", 3)
+        cache.set("user:1", 1)
+        cache.set("user:2", 2)
+        cache.set("item:1", 3)
         ks = cache.keys("user:*")
         assert set(ks) == {"user:1", "user:2"}
 
     def test_scan_iter(self, cache: ZeroCache):
-        cache.set("a", 1); cache.set("b", 2)
+        cache.set("a", 1)
+        cache.set("b", 2)
         found = list(cache.scan_iter("*"))
         assert set(found) == {"a", "b"}
 
