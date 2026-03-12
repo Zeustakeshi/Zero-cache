@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      id-token: write   # BẮT BUỘC cho OIDC Trusted Publisher
+      id-token: write  
 
     steps:
       - uses: actions/checkout@v4
@@ -26,4 +26,3 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        # Không cần token hay password — OIDC tự xử lý
