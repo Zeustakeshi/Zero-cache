@@ -68,7 +68,9 @@ class SortedSet:
         pos = bisect.bisect_left(self._sl, (score, member))
         return pos if pos < len(self._sl) and self._sl[pos] == (score, member) else None
 
-    def zrange(self, start: int, end: int, with_scores: bool = False) -> list:
+    def zrange(
+        self, start: int, end: int, with_scores: bool = False
+    ) -> list[str] | list[tuple[float, str]]:
         """Slice by rank range (inclusive *end*) — O(k).
 
         Args:
@@ -76,9 +78,11 @@ class SortedSet:
             end:         End rank inclusive; -1 means last element.
             with_scores: If ``True`` returns list of ``(score, member)`` tuples.
         """
-        end = end + 1 if end >= 0 else None
-        sliced = self._sl[start:end]
-        return sliced if with_scores else [m for _, m in sliced]
+        _end: int | None = end + 1 if end >= 0 else None
+        sliced = self._sl[start:_end]
+        if with_scores:
+            return sliced
+        return [m for _, m in sliced]
 
     def zrangebyscore(self, min_s: float, max_s: float) -> list[str]:
         """Return members with scores in ``[min_s, max_s]`` — O(log n + k)."""

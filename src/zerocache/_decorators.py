@@ -32,7 +32,7 @@ def cached(
     key_prefix: str = "",
     ttl: int = 300,
     cache: ZeroCache | None = None,
-) -> Callable:
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Cache decorator for sync and async functions.
 
     The cache key is built from *key_prefix* (or the function's
@@ -60,7 +60,7 @@ def cached(
             ...
     """
 
-    def decorator(fn: Callable) -> Callable:
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
 
         @wraps(fn)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:

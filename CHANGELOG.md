@@ -7,12 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.2] - 2024-03-12
+
+### Added
+- **Strict Typing**: Full `mypy --strict` compliance across the entire package.
+- **Generics**: Explicit type parameters for all collection types (`list`, `dict`, `Queue`).
+
+### Changed
+- Standardized project structure for open-source publication.
+- Moved core logic to `src/zerocache/`.
+- Consolidated all linting/formatting rules using `ruff`.
+
+### Fixed
+- **Shadowing**: Resolved `set` type shadowing in `ZeroCache` by using `builtins.set`.
+- **Typo**: Corrected `Any(...)` syntax errors in async wrappers.
+- **BUG-1**: (From 1.1.1) `LRUStore.copy()` compatibility with `OrderedDict`.
+
 ## [1.1.1] - 2024-03-12
 
 ### Fixed
 - **BUG-1**: `LRUStore.copy()` — `OrderedDict.copy()` calls `self.__class__()`
   which triggers `LRUStore.__init__(maxsize=...)` without arguments → `TypeError`.
   Fixed by overriding `copy()` to return a plain `dict`.
+  *(Update: In 1.1.2, this was further refined to return a new LRUStore instance for better compatibility.)*
 
 ---
 

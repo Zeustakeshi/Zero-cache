@@ -40,7 +40,7 @@ class Pipeline:
 
     def __init__(self, cache: ZeroCache) -> None:
         self._c = cache
-        self._cmds: list[tuple[str, tuple, dict]] = []
+        self._cmds: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
 
     def _q(self, method: str, *args: Any, **kwargs: Any) -> Pipeline:
         self._cmds.append((method, args, kwargs))
@@ -75,13 +75,13 @@ class Pipeline:
     def sadd(self, k: str, *v: Any) -> Pipeline:
         return self._q("sadd", k, *v)
 
-    def zadd(self, k: str, m: dict) -> Pipeline:
+    def zadd(self, k: str, m: dict[str, float]) -> Pipeline:
         return self._q("zadd", k, m)
 
     def expire(self, k: str, t: int) -> Pipeline:
         return self._q("expire", k, t)
 
-    def mset(self, mapping: dict, ttl: int = 0) -> Pipeline:
+    def mset(self, mapping: dict[str, Any], ttl: int = 0) -> Pipeline:
         return self._q("mset", mapping, ttl=ttl)
 
     # ── execution ──────────────────────────────────────────────────────
