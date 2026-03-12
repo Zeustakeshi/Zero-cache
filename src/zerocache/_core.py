@@ -24,6 +24,7 @@ Core engine: CacheEntry, LRUStore, ShardedStore, ZeroCache, get_cache.
 from __future__ import annotations
 
 import asyncio
+import builtins
 import fnmatch
 import heapq
 import logging
@@ -36,7 +37,7 @@ from collections import OrderedDict, defaultdict
 from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from zerocache._pipeline import Pipeline
 from zerocache._sorted_set import SortedSet
@@ -96,7 +97,7 @@ class CacheEntry:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-class LRUStore(OrderedDict):
+class LRUStore(OrderedDict[str, CacheEntry]):
     """LRU-evicting dict, used as one shard of :class:`ShardedStore`."""
 
     def __init__(self, maxsize: int) -> None:
@@ -116,21 +117,11 @@ class LRUStore(OrderedDict):
         """Read entry WITHOUT updating LRU order."""
         return super().__getitem__(key) if key in self else None
 
-    def copy(self) -> dict[str, CacheEntry]:
-        """Return a plain dict copy — NOT an LRUStore.
-
-        Root cause of BUG-1 (v1.1.0):
-            OrderedDict.copy() calls self.__class__() internally.
-            self.__class__ is LRUStore, so it calls LRUStore() with no
-            arguments → LRUStore.__init__() missing required 'maxsize'
-            → TypeError.
-
-        Fix:
-            Override copy() to return dict(self.items()) which bypasses
-            __class__ construction entirely.  ShardedStore.snapshot()
-            only needs a plain mapping, not LRU behaviour.
-        """
-        return dict(self.items())
+    def copy(self) -> LRUStore:
+        """Return a deep copy as LRUStore."""
+        new = LRUStore(self.maxsize)
+        new.update(self)
+        return new
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -275,7 +266,7 @@ class ZeroCache:
         self._stats_lock = threading.Lock()
 
         # Pub/Sub
-        self._subscribers: dict[str, list[asyncio.Queue]] = defaultdict(list)
+        self._subscribers: dict[str, list[asyncio.Queue[Any]]] = defaultdict(list)
 
         if load_on_start:
             self._load()
@@ -695,7 +686,7 @@ class ZeroCache:
         d = self.get(key)
         return d.get(field, default) if isinstance(d, dict) else default
 
-    def hmset(self, key: str, mapping: dict, ttl: int = 0) -> bool:
+    def hmset(self, key: str, mapping: dict[str, Any], ttl: int = 0) -> bool:
         """Set multiple fields in hash from *mapping*."""
         key = self._k(key)
         shard, lock = self._db.shard_of(key)
@@ -712,16 +703,16 @@ class ZeroCache:
         d = self.get(key) or {}
         return [d.get(f) for f in fields]
 
-    def hgetall(self, key: str) -> dict:
+    def hgetall(self, key: str) -> dict[str, Any]:
         """Return entire hash as dict."""
         return self.get(key) or {}
 
-    def hkeys(self, key: str) -> list:
+    def hkeys(self, key: str) -> list[str]:
         """Return all field names in hash."""
         d = self.get(key)
         return list(d.keys()) if isinstance(d, dict) else []
 
-    def hvals(self, key: str) -> list:
+    def hvals(self, key: str) -> list[Any]:
         """Return all field values in hash."""
         d = self.get(key)
         return list(d.values()) if isinstance(d, dict) else []
@@ -761,7 +752,7 @@ class ZeroCache:
     # LIST OPS
     # ───────────────────────────────────────────────────────────────────
 
-    def _get_list(self, key: str, shard: LRUStore) -> list:
+    def _get_list(self, key: str, shard: LRUStore) -> list[Any]:
         e = shard.peek(key)
         return e.value if e and e.dtype == DataType.LIST and not e.is_expired() else []
 
@@ -813,7 +804,7 @@ class ZeroCache:
             del e.value[-count:]
             return result
 
-    def lrange(self, key: str, start: int, end: int) -> list:
+    def lrange(self, key: str, start: int, end: int) -> list[Any]:
         """Return elements in [start, end] range (inclusive)."""
         d = self.get(key)
         return d[start : end + 1 if end >= 0 else None] if isinstance(d, list) else []
@@ -859,7 +850,7 @@ class ZeroCache:
                 before = len(e.value)
                 e.value.update(members)
                 return len(e.value) - before
-            self.set(key, set(members))
+            self.set(key, builtins.set(members))
             return len(members)
 
     def srem(self, key: str, *members: Any) -> int:
@@ -874,10 +865,10 @@ class ZeroCache:
             e.value.difference_update(members)
             return before - len(e.value)
 
-    def smembers(self, key: str) -> set:
+    def smembers(self, key: str) -> builtins.set[Any]:
         """Return all members of set."""
         d = self.get(key)
-        return d if isinstance(d, set) else set()
+        return d if isinstance(d, builtins.set) else builtins.set()
 
     def sismember(self, key: str, member: Any) -> bool:
         """Return ``True`` if *member* is in set."""
@@ -887,20 +878,20 @@ class ZeroCache:
         """Return cardinality (number of members) of set."""
         return len(self.smembers(key))
 
-    def sinter(self, *keys: str) -> set:
+    def sinter(self, *keys: str) -> builtins.set[Any]:
         """Return intersection of all sets."""
         s = [self.smembers(k) for k in keys]
-        return set.intersection(*s) if s else set()
+        return builtins.set.intersection(*s) if s else builtins.set()
 
-    def sunion(self, *keys: str) -> set:
+    def sunion(self, *keys: str) -> builtins.set[Any]:
         """Return union of all sets."""
         s = [self.smembers(k) for k in keys]
-        return set.union(*s) if s else set()
+        return builtins.set.union(*s) if s else builtins.set()
 
-    def sdiff(self, *keys: str) -> set:
+    def sdiff(self, *keys: str) -> builtins.set[Any]:
         """Return difference between first set and remaining sets."""
         s = [self.smembers(k) for k in keys]
-        return set.difference(*s) if s else set()
+        return builtins.set.difference(*s) if s else builtins.set()
 
     def spop(self, key: str) -> Any:
         """Remove and return a random member from set."""
@@ -951,7 +942,9 @@ class ZeroCache:
         d = self.get(key)
         return d.zcard() if isinstance(d, SortedSet) else 0
 
-    def zrange(self, key: str, start: int, end: int, with_scores: bool = False) -> list:
+    def zrange(
+        self, key: str, start: int, end: int, with_scores: bool = False
+    ) -> list[Any]:
         """Return members in rank range [start, end]."""
         d = self.get(key)
         return d.zrange(start, end, with_scores) if isinstance(d, SortedSet) else []
@@ -994,31 +987,31 @@ class ZeroCache:
         return await self._run(self.get, key, default)
 
     async def async_set(self, key: str, value: Any, ttl: int = 0, **kw: Any) -> bool:
-        return await self._run(self.set, key, value, ttl=ttl, **kw)
+        return cast(bool, await self._run(self.set, key, value, ttl=ttl, **kw))
 
     async def async_delete(self, *keys: str) -> int:
-        return await self._run(self.delete, *keys)
+        return cast(int, await self._run(self.delete, *keys))
 
     async def async_mget(self, *keys: str) -> list[Any]:
-        return await self._run(self.mget, *keys)
+        return cast(list[Any], await self._run(self.mget, *keys))
 
-    async def async_mset(self, mapping: dict, ttl: int = 0) -> bool:
-        return await self._run(self.mset, mapping, ttl=ttl)
+    async def async_mset(self, mapping: dict[str, Any], ttl: int = 0) -> bool:
+        return cast(bool, await self._run(self.mset, mapping, ttl=ttl))
 
     async def async_hset(self, key: str, field: str, value: Any, ttl: int = 0) -> bool:
-        return await self._run(self.hset, key, field, value, ttl=ttl)
+        return cast(bool, await self._run(self.hset, key, field, value, ttl=ttl))
 
     async def async_hget(self, key: str, field: str, default: Any = None) -> Any:
         return await self._run(self.hget, key, field, default)
 
-    async def async_hgetall(self, key: str) -> dict:
-        return await self._run(self.hgetall, key)
+    async def async_hgetall(self, key: str) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._run(self.hgetall, key))
 
     async def async_lpush(self, key: str, *values: Any) -> int:
-        return await self._run(self.lpush, key, *values)
+        return cast(int, await self._run(self.lpush, key, *values))
 
     async def async_rpush(self, key: str, *values: Any) -> int:
-        return await self._run(self.rpush, key, *values)
+        return cast(int, await self._run(self.rpush, key, *values))
 
     async def async_lpop(self, key: str, count: int = 1) -> Any:
         return await self._run(self.lpop, key, count)
@@ -1026,23 +1019,25 @@ class ZeroCache:
     async def async_rpop(self, key: str, count: int = 1) -> Any:
         return await self._run(self.rpop, key, count)
 
-    async def async_lrange(self, key: str, start: int, end: int) -> list:
-        return await self._run(self.lrange, key, start, end)
+    async def async_lrange(self, key: str, start: int, end: int) -> list[Any]:
+        return cast(list[Any], await self._run(self.lrange, key, start, end))
 
     async def async_sadd(self, key: str, *members: Any) -> int:
-        return await self._run(self.sadd, key, *members)
+        return cast(int, await self._run(self.sadd, key, *members))
 
-    async def async_smembers(self, key: str) -> set:
-        return await self._run(self.smembers, key)
+    async def async_smembers(self, key: str) -> builtins.set[Any]:
+        return cast(builtins.set[Any], await self._run(self.smembers, key))
 
     async def async_zadd(self, key: str, mapping: dict[str, float]) -> int:
-        return await self._run(self.zadd, key, mapping)
+        return cast(int, await self._run(self.zadd, key, mapping))
 
-    async def async_zrange(self, key: str, start: int, end: int, with_scores: bool = False) -> list:
-        return await self._run(self.zrange, key, start, end, with_scores)
+    async def async_zrange(
+        self, key: str, start: int, end: int, with_scores: bool = False
+    ) -> list[Any]:
+        return cast(list[Any], await self._run(self.zrange, key, start, end, with_scores))
 
     async def async_incr(self, key: str, amount: int = 1) -> int:
-        return await self._run(self.incr, key, amount)
+        return cast(int, await self._run(self.incr, key, amount))
 
     # ───────────────────────────────────────────────────────────────────
     # PIPELINE
@@ -1067,13 +1062,13 @@ class ZeroCache:
             await asyncio.gather(*(q.put(message) for q in subs))
         return len(subs)
 
-    async def subscribe(self, channel: str) -> asyncio.Queue:
+    async def subscribe(self, channel: str) -> asyncio.Queue[Any]:
         """Subscribe to *channel*. Await ``queue.get()`` to receive messages."""
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue[Any] = asyncio.Queue()
         self._subscribers[channel].append(q)
         return q
 
-    def unsubscribe(self, channel: str, queue: asyncio.Queue) -> None:
+    def unsubscribe(self, channel: str, queue: asyncio.Queue[Any]) -> None:
         """Remove *queue* from *channel* subscribers."""
         if channel in self._subscribers:
             self._subscribers[channel] = [q for q in self._subscribers[channel] if q is not queue]
