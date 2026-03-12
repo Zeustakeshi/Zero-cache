@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "zero-cache"
+name = "pyzerocache"
 version = "1.1.1"
 description = "Redis-like in-memory cache engine for Python — zero dependencies"
 readme = "README.md"
