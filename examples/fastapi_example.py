@@ -7,6 +7,7 @@ Usage:
 """
 
 from fastapi import Depends, FastAPI
+
 from zerocache import ZeroCache, get_cache
 
 app = FastAPI(title="ZeroCache + FastAPI Example")

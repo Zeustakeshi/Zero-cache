@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import pytest
 from zerocache import ZeroCache, cached
 
 
@@ -18,7 +16,7 @@ class TestCachedDecorator:
             return n * 2
 
         assert compute(5) == 10
-        assert compute(5) == 10   # cache hit
+        assert compute(5) == 10  # cache hit
         assert call_count == 1
 
     def test_sync_different_args_separate_entries(self, cache: ZeroCache):
@@ -53,7 +51,7 @@ class TestCachedDecorator:
             return f"user_{user_id}"
 
         result1 = await fetch(1)
-        result2 = await fetch(1)   # cache hit
+        result2 = await fetch(1)  # cache hit
         assert result1 == result2 == "user_1"
         assert call_count == 1
 
@@ -80,7 +78,7 @@ class TestCachedDecorator:
             return a + b
 
         compute(1, b=2)
-        compute(1, b=2)   # same kwargs → cache hit
+        compute(1, b=2)  # same kwargs → cache hit
         assert call_count == 1
 
     def test_cached_different_kwargs(self, cache: ZeroCache):
@@ -93,5 +91,5 @@ class TestCachedDecorator:
             return a + b
 
         compute(1, b=2)
-        compute(1, b=3)   # different kwargs → separate cache entry
+        compute(1, b=3)  # different kwargs → separate cache entry
         assert call_count == 2

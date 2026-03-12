@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from zerocache import ZeroCache
 
 
@@ -23,20 +22,20 @@ class TestHset:
         cache.hset("user:1", "name", "Alice")
         cache.hset("user:1", "age", 30)
         assert cache.hget("user:1", "name") == "Alice"
-        assert cache.hget("user:1", "age")  == 30
+        assert cache.hget("user:1", "age") == 30
 
 
 class TestHmset:
     def test_hmset_creates_hash(self, cache: ZeroCache):
         cache.hmset("user:1", {"name": "Bob", "age": 25})
         assert cache.hget("user:1", "name") == "Bob"
-        assert cache.hget("user:1", "age")  == 25
+        assert cache.hget("user:1", "age") == 25
 
     def test_hmset_updates_existing(self, cache: ZeroCache):
         cache.hmset("user:1", {"name": "Bob"})
         cache.hmset("user:1", {"age": 25})
         assert cache.hget("user:1", "name") == "Bob"
-        assert cache.hget("user:1", "age")  == 25
+        assert cache.hget("user:1", "age") == 25
 
     def test_hmget(self, cache: ZeroCache):
         cache.hmset("user:1", {"name": "Carol", "age": 22, "city": "NY"})

@@ -33,13 +33,14 @@ import threading
 import time
 import zlib
 from collections import OrderedDict, defaultdict
-from dataclasses  import dataclass
-from pathlib      import Path
-from typing       import Any, Dict, Generator, List, Optional, Tuple
+from collections.abc import Generator
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-from zerocache._types     import DataType, _resolve_dtype
+from zerocache._pipeline import Pipeline
 from zerocache._sorted_set import SortedSet
-from zerocache._pipeline  import Pipeline
+from zerocache._types import DataType, _resolve_dtype
 
 __all__ = ["CacheEntry", "LRUStore", "ShardedStore", "ZeroCache", "get_cache"]
 
@@ -59,15 +60,16 @@ logger = logging.getLogger("zerocache")
 #   Added    version      — for TTL heap invalidation
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @dataclass(slots=True)
 class CacheEntry:
     """Single cache record with value, optional TTL, data type, and metadata."""
 
-    value:      Any
-    expires_at: float    = 0.0              # monotonic; 0 = immortal
-    dtype:      DataType = DataType.STRING  # IntEnum — faster than str
-    hits:       int      = 0               # disabled when track_hits=False
-    version:    int      = 0               # incremented on each SET
+    value: Any
+    expires_at: float = 0.0  # monotonic; 0 = immortal
+    dtype: DataType = DataType.STRING  # IntEnum — faster than str
+    hits: int = 0  # disabled when track_hits=False
+    version: int = 0  # incremented on each SET
 
     def is_expired(self) -> bool:
         """Return ``True`` if this entry has passed its TTL."""
@@ -93,12 +95,13 @@ class CacheEntry:
 #   → TypeError.  Override copy() to return a plain dict instead.
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class LRUStore(OrderedDict):
     """LRU-evicting dict, used as one shard of :class:`ShardedStore`."""
 
     def __init__(self, maxsize: int) -> None:
         super().__init__()
-        self.maxsize   = maxsize
+        self.maxsize = maxsize
         self.evictions = 0
 
     def __setitem__(self, key: str, value: CacheEntry) -> None:
@@ -106,14 +109,14 @@ class LRUStore(OrderedDict):
             self.move_to_end(key)
         super().__setitem__(key, value)
         if len(self) > self.maxsize:
-            self.popitem(last=False)   # evict LRU head
+            self.popitem(last=False)  # evict LRU head
             self.evictions += 1
 
-    def peek(self, key: str) -> Optional[CacheEntry]:
+    def peek(self, key: str) -> CacheEntry | None:
         """Read entry WITHOUT updating LRU order."""
         return super().__getitem__(key) if key in self else None
 
-    def copy(self) -> Dict[str, CacheEntry]:
+    def copy(self) -> dict[str, CacheEntry]:
         """Return a plain dict copy — NOT an LRUStore.
 
         Root cause of BUG-1 (v1.1.0):
@@ -137,6 +140,7 @@ class LRUStore(OrderedDict):
 # Each shard has its own RLock → ops on different keys never contend.
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class ShardedStore:
     """N-shard LRU store.  Key → shard via ``hash(key) & (N-1)``.
 
@@ -147,10 +151,10 @@ class ShardedStore:
 
     def __init__(self, num_shards: int = 16, maxsize: int = 100_000) -> None:
         assert num_shards & (num_shards - 1) == 0, "num_shards must be a power of two"
-        self.n      = num_shards
-        self._mask  = num_shards - 1
+        self.n = num_shards
+        self._mask = num_shards - 1
         self.shards = [LRUStore(max(1, maxsize // num_shards)) for _ in range(num_shards)]
-        self.locks  = [threading.RLock() for _ in range(num_shards)]
+        self.locks = [threading.RLock() for _ in range(num_shards)]
 
     # ── routing ────────────────────────────────────────────────────────
 
@@ -158,28 +162,28 @@ class ShardedStore:
         """Shard index — bitmask is faster than modulo."""
         return hash(key) & self._mask
 
-    def shard_of(self, key: str) -> Tuple[LRUStore, threading.RLock]:
+    def shard_of(self, key: str) -> tuple[LRUStore, threading.RLock]:
         i = self.idx(key)
         return self.shards[i], self.locks[i]
 
     # ── bulk helpers ───────────────────────────────────────────────────
 
-    def all_items(self) -> List[Tuple[str, CacheEntry]]:
+    def all_items(self) -> list[tuple[str, CacheEntry]]:
         """Snapshot of all (key, entry) pairs across every shard."""
-        items: List[Tuple[str, CacheEntry]] = []
+        items: list[tuple[str, CacheEntry]] = []
         for shard, lock in zip(self.shards, self.locks):
             with lock:
                 items.extend(list(shard.items()))
         return items
 
-    def snapshot(self) -> Dict[str, CacheEntry]:
+    def snapshot(self) -> dict[str, CacheEntry]:
         """Non-blocking snapshot — each shard locked briefly and independently.
 
         Serialisation happens outside any lock.
         Uses dict(shard.items()) explicitly (not shard.copy()) to make
         the intent clear and guard against any future copy() changes.
         """
-        snap: Dict[str, CacheEntry] = {}
+        snap: dict[str, CacheEntry] = {}
         for shard, lock in zip(self.shards, self.locks):
             with lock:
                 snap.update(dict(shard.items()))
@@ -204,6 +208,7 @@ class ShardedStore:
 # ═══════════════════════════════════════════════════════════════════════
 # ZEROCACHE
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class ZeroCache:
     """Redis-like in-memory cache engine — ZeroCache v1.1.1.
@@ -244,38 +249,38 @@ class ZeroCache:
 
     def __init__(
         self,
-        maxsize:            int  = 100_000,
-        num_shards:         int  = 16,
-        persist_path:       str  = ".zerocache.db",
-        auto_save_interval: int  = 30,
-        compress:           bool = True,
-        load_on_start:      bool = True,
-        track_hits:         bool = True,
-        intern_keys:        bool = True,
+        maxsize: int = 100_000,
+        num_shards: int = 16,
+        persist_path: str = ".zerocache.db",
+        auto_save_interval: int = 30,
+        compress: bool = True,
+        load_on_start: bool = True,
+        track_hits: bool = True,
+        intern_keys: bool = True,
     ) -> None:
-        self._db         = ShardedStore(num_shards, maxsize)
-        self.track_hits  = track_hits
+        self._db = ShardedStore(num_shards, maxsize)
+        self.track_hits = track_hits
         self.intern_keys = intern_keys
 
-        self.persist_path        = Path(persist_path)
-        self.compress            = compress
-        self.auto_save_interval  = auto_save_interval
+        self.persist_path = Path(persist_path)
+        self.compress = compress
+        self.auto_save_interval = auto_save_interval
 
         # TTL heap: (expire_at_monotonic, key, version)
-        self._ttl_heap: List[Tuple[float, str, int]] = []
+        self._ttl_heap: list[tuple[float, str, int]] = []
         self._heap_lock = threading.Lock()
 
         # Thread-safe stats
-        self._stats      = dict(hits=0, misses=0, sets=0, deletes=0, saves=0, loads=0)
+        self._stats = dict(hits=0, misses=0, sets=0, deletes=0, saves=0, loads=0)
         self._stats_lock = threading.Lock()
 
         # Pub/Sub
-        self._subscribers: Dict[str, List[asyncio.Queue]] = defaultdict(list)
+        self._subscribers: dict[str, list[asyncio.Queue]] = defaultdict(list)
 
         if load_on_start:
             self._load()
 
-        self._running   = True
+        self._running = True
         self._bg_thread = threading.Thread(
             target=self._background_worker,
             daemon=True,
@@ -340,10 +345,7 @@ class ZeroCache:
         3. Write to *.tmp then atomically rename → crash-safe.
         """
         try:
-            snapshot = {
-                k: v for k, v in self._db.snapshot().items()
-                if not v.is_expired()
-            }
+            snapshot = {k: v for k, v in self._db.snapshot().items() if not v.is_expired()}
 
             payload = pickle.dumps(
                 {"version": self.VERSION, "ts": time.time(), "data": snapshot},
@@ -354,7 +356,7 @@ class ZeroCache:
 
             tmp = self.persist_path.with_suffix(".tmp")
             tmp.write_bytes(payload)
-            tmp.replace(self.persist_path)   # atomic rename
+            tmp.replace(self.persist_path)  # atomic rename
 
             self._stat("saves")
             logger.debug("[ZeroCache] Saved %d keys → %s", len(snapshot), self.persist_path)
@@ -378,7 +380,7 @@ class ZeroCache:
                 except zlib.error:
                     pass
 
-            snap   = pickle.loads(payload)
+            snap = pickle.loads(payload)
             loaded = 0
 
             for key, entry in snap["data"].items():
@@ -425,11 +427,11 @@ class ZeroCache:
 
     def set(
         self,
-        key:   str,
+        key: str,
         value: Any,
-        ttl:   int  = 0,
-        nx:    bool = False,
-        xx:    bool = False,
+        ttl: int = 0,
+        nx: bool = False,
+        xx: bool = False,
     ) -> bool:
         """Store *value* under *key*.
 
@@ -443,23 +445,25 @@ class ZeroCache:
         Returns:
             ``True`` on success; ``False`` when nx/xx condition not met.
         """
-        key        = self._k(key)
+        key = self._k(key)
         expires_at = time.monotonic() + ttl if ttl > 0 else 0.0
         shard, lock = self._db.shard_of(key)
 
         with lock:
             existing = shard.peek(key)
-            exists   = existing is not None and not existing.is_expired()
+            exists = existing is not None and not existing.is_expired()
 
-            if nx and exists:     return False
-            if xx and not exists: return False
+            if nx and exists:
+                return False
+            if xx and not exists:
+                return False
 
-            version    = (existing.version + 1) if existing else 0
+            version = (existing.version + 1) if existing else 0
             shard[key] = CacheEntry(
-                value      = value,
-                expires_at = expires_at,
-                dtype      = _resolve_dtype(value),
-                version    = version,
+                value=value,
+                expires_at=expires_at,
+                dtype=_resolve_dtype(value),
+                version=version,
             )
 
         if ttl > 0:
@@ -470,7 +474,7 @@ class ZeroCache:
 
     def get(self, key: str, default: Any = None) -> Any:
         """Return value for *key*, or *default* if missing/expired."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
 
         with lock:
@@ -494,7 +498,7 @@ class ZeroCache:
         """Remove one or more keys. Returns count actually deleted."""
         count = 0
         for key in keys:
-            key         = self._k(key)
+            key = self._k(key)
             shard, lock = self._db.shard_of(key)
             with lock:
                 if key in shard:
@@ -507,7 +511,7 @@ class ZeroCache:
         """Return number of provided keys that exist and have not expired."""
         count = 0
         for key in keys:
-            key         = self._k(key)
+            key = self._k(key)
             shard, lock = self._db.shard_of(key)
             with lock:
                 e = shard.peek(key)
@@ -517,8 +521,8 @@ class ZeroCache:
 
     def expire(self, key: str, ttl: int) -> bool:
         """Set/update TTL on an existing key. Returns ``False`` if not found."""
-        key         = self._k(key)
-        expires_at  = time.monotonic() + ttl
+        key = self._k(key)
+        expires_at = time.monotonic() + ttl
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -530,7 +534,7 @@ class ZeroCache:
 
     def persist(self, key: str) -> bool:
         """Remove TTL (make immortal). Returns ``False`` if not found."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -541,17 +545,19 @@ class ZeroCache:
 
     def ttl(self, key: str) -> int:
         """Remaining TTL in seconds. -1 = no expiry | -2 = not found."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
-            if e is None:          return -2
-            if e.expires_at == 0:  return -1
+            if e is None:
+                return -2
+            if e.expires_at == 0:
+                return -1
             return max(0, int(e.expires_at - time.monotonic()))
 
     def type(self, key: str) -> str:
         """Return data type: string | hash | list | set | zset | none."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -577,7 +583,8 @@ class ZeroCache:
         else:
             ordered = [self._db.locks[di], self._db.locks[si]]
 
-        for lk in ordered: lk.acquire()
+        for lk in ordered:
+            lk.acquire()
         try:
             s_shard, d_shard = self._db.shards[si], self._db.shards[di]
             entry = s_shard.peek(src)
@@ -586,7 +593,8 @@ class ZeroCache:
             d_shard[dst] = entry
             del s_shard[src]
         finally:
-            for lk in reversed(ordered): lk.release()
+            for lk in reversed(ordered):
+                lk.release()
 
         if entry.expires_at > 0:
             remaining = entry.expires_at - time.monotonic()
@@ -595,7 +603,7 @@ class ZeroCache:
 
         return True
 
-    def keys(self, pattern: str = "*") -> List[str]:
+    def keys(self, pattern: str = "*") -> list[str]:
         """Return all matching keys — O(N).
 
         Warning:
@@ -628,10 +636,10 @@ class ZeroCache:
 
     def incr(self, key: str, amount: int = 1) -> int:
         """Atomically increment integer value (missing key treated as 0)."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
-            e   = shard.peek(key)
+            e = shard.peek(key)
             val = (int(e.value) if e and not e.is_expired() else 0) + amount
             self.set(key, val)
             return val
@@ -642,10 +650,10 @@ class ZeroCache:
 
     def append(self, key: str, value: str) -> int:
         """Append *value* to string. Returns new length."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
-            e   = shard.peek(key)
+            e = shard.peek(key)
             val = (str(e.value) if e else "") + value
             self.set(key, val)
             return len(val)
@@ -656,11 +664,11 @@ class ZeroCache:
         self.set(key, new_value)
         return old
 
-    def mget(self, *keys: str) -> List[Any]:
+    def mget(self, *keys: str) -> list[Any]:
         """Return values for multiple keys (None for missing)."""
         return [self.get(k) for k in keys]
 
-    def mset(self, mapping: Dict[str, Any], ttl: int = 0) -> bool:
+    def mset(self, mapping: dict[str, Any], ttl: int = 0) -> bool:
         """Set multiple keys from *mapping* dict."""
         for k, v in mapping.items():
             self.set(k, v, ttl=ttl)
@@ -672,7 +680,7 @@ class ZeroCache:
 
     def hset(self, key: str, field: str, value: Any, ttl: int = 0) -> bool:
         """Set *field* in hash. Creates hash if missing."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -687,9 +695,9 @@ class ZeroCache:
         d = self.get(key)
         return d.get(field, default) if isinstance(d, dict) else default
 
-    def hmset(self, key: str, mapping: Dict, ttl: int = 0) -> bool:
+    def hmset(self, key: str, mapping: dict, ttl: int = 0) -> bool:
         """Set multiple fields in hash from *mapping*."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -699,38 +707,38 @@ class ZeroCache:
                 self.set(key, dict(mapping), ttl=ttl)
         return True
 
-    def hmget   (self, key: str, *fields: str) -> List[Any]:
+    def hmget(self, key: str, *fields: str) -> list[Any]:
         """Return values for multiple *fields* from hash."""
         d = self.get(key) or {}
         return [d.get(f) for f in fields]
 
-    def hgetall (self, key: str) -> Dict:
+    def hgetall(self, key: str) -> dict:
         """Return entire hash as dict."""
         return self.get(key) or {}
 
-    def hkeys   (self, key: str) -> List:
+    def hkeys(self, key: str) -> list:
         """Return all field names in hash."""
         d = self.get(key)
         return list(d.keys()) if isinstance(d, dict) else []
 
-    def hvals   (self, key: str) -> List:
+    def hvals(self, key: str) -> list:
         """Return all field values in hash."""
         d = self.get(key)
         return list(d.values()) if isinstance(d, dict) else []
 
-    def hlen    (self, key: str) -> int:
+    def hlen(self, key: str) -> int:
         """Return number of fields in hash."""
         d = self.get(key)
         return len(d) if isinstance(d, dict) else 0
 
-    def hexists (self, key: str, field: str) -> bool:
+    def hexists(self, key: str, field: str) -> bool:
         """Return ``True`` if *field* exists in hash."""
         d = self.get(key)
         return isinstance(d, dict) and field in d
 
     def hdel(self, key: str, *fields: str) -> int:
         """Delete *fields* from hash. Returns count removed."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -740,11 +748,11 @@ class ZeroCache:
 
     def hincrby(self, key: str, field: str, amount: int = 1) -> int:
         """Increment *field* in hash by *amount*."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
-            e   = shard.peek(key)
-            d   = e.value if e and e.dtype == DataType.HASH else {}
+            e = shard.peek(key)
+            d = e.value if e and e.dtype == DataType.HASH else {}
             val = int(d.get(field, 0)) + amount
             self.hset(key, field, val)
             return val
@@ -753,23 +761,24 @@ class ZeroCache:
     # LIST OPS
     # ───────────────────────────────────────────────────────────────────
 
-    def _get_list(self, key: str, shard: LRUStore) -> List:
+    def _get_list(self, key: str, shard: LRUStore) -> list:
         e = shard.peek(key)
         return e.value if e and e.dtype == DataType.LIST and not e.is_expired() else []
 
     def lpush(self, key: str, *values: Any) -> int:
         """Prepend *values* to list. Returns new length."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             lst = self._get_list(key, shard)
-            for v in reversed(values): lst.insert(0, v)
+            for v in reversed(values):
+                lst.insert(0, v)
             self.set(key, lst)
             return len(lst)
 
     def rpush(self, key: str, *values: Any) -> int:
         """Append *values* to list. Returns new length."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             lst = self._get_list(key, shard)
@@ -779,7 +788,7 @@ class ZeroCache:
 
     def lpop(self, key: str, count: int = 1) -> Any:
         """Remove and return *count* elements from left."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -792,7 +801,7 @@ class ZeroCache:
 
     def rpop(self, key: str, count: int = 1) -> Any:
         """Remove and return *count* elements from right."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -804,7 +813,7 @@ class ZeroCache:
             del e.value[-count:]
             return result
 
-    def lrange(self, key: str, start: int, end: int) -> List:
+    def lrange(self, key: str, start: int, end: int) -> list:
         """Return elements in [start, end] range (inclusive)."""
         d = self.get(key)
         return d[start : end + 1 if end >= 0 else None] if isinstance(d, list) else []
@@ -817,19 +826,24 @@ class ZeroCache:
     def lindex(self, key: str, index: int) -> Any:
         """Return element at *index*."""
         d = self.get(key)
-        try:    return d[index] if isinstance(d, list) else None
-        except: return None
+        try:
+            return d[index] if isinstance(d, list) else None
+        except (IndexError, TypeError):
+            return None
 
     def lset(self, key: str, index: int, value: Any) -> bool:
         """Set element at *index*. Returns ``False`` if out of bounds."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
             if not e or e.dtype != DataType.LIST:
                 return False
-            try:    e.value[index] = value; return True
-            except: return False
+            try:
+                e.value[index] = value
+                return True
+            except (IndexError, TypeError):
+                return False
 
     # ───────────────────────────────────────────────────────────────────
     # SET OPS
@@ -837,7 +851,7 @@ class ZeroCache:
 
     def sadd(self, key: str, *members: Any) -> int:
         """Add *members* to set. Returns count of new members added."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -850,7 +864,7 @@ class ZeroCache:
 
     def srem(self, key: str, *members: Any) -> int:
         """Remove *members* from set. Returns count removed."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -860,7 +874,7 @@ class ZeroCache:
             e.value.difference_update(members)
             return before - len(e.value)
 
-    def smembers (self, key: str) -> set:
+    def smembers(self, key: str) -> set:
         """Return all members of set."""
         d = self.get(key)
         return d if isinstance(d, set) else set()
@@ -869,28 +883,28 @@ class ZeroCache:
         """Return ``True`` if *member* is in set."""
         return member in self.smembers(key)
 
-    def scard    (self, key: str) -> int:
+    def scard(self, key: str) -> int:
         """Return cardinality (number of members) of set."""
         return len(self.smembers(key))
 
-    def sinter   (self, *keys: str) -> set:
+    def sinter(self, *keys: str) -> set:
         """Return intersection of all sets."""
         s = [self.smembers(k) for k in keys]
         return set.intersection(*s) if s else set()
 
-    def sunion   (self, *keys: str) -> set:
+    def sunion(self, *keys: str) -> set:
         """Return union of all sets."""
         s = [self.smembers(k) for k in keys]
         return set.union(*s) if s else set()
 
-    def sdiff    (self, *keys: str) -> set:
+    def sdiff(self, *keys: str) -> set:
         """Return difference between first set and remaining sets."""
         s = [self.smembers(k) for k in keys]
         return set.difference(*s) if s else set()
 
     def spop(self, key: str) -> Any:
         """Remove and return a random member from set."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -902,52 +916,54 @@ class ZeroCache:
     # SORTED SET OPS
     # ───────────────────────────────────────────────────────────────────
 
-    def zadd(self, key: str, mapping: Dict[str, float]) -> int:
+    def zadd(self, key: str, mapping: dict[str, float]) -> int:
         """Add/update members with scores. *mapping* = ``{member: score}``.
 
         Returns:
             Number of members in *mapping* (not necessarily new ones).
         """
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
             if e and e.dtype == DataType.ZSET and not e.is_expired():
-                for m, s in mapping.items(): e.value.zadd(m, s)
+                for m, s in mapping.items():
+                    e.value.zadd(m, s)
             else:
                 zs = SortedSet()
-                for m, s in mapping.items(): zs.zadd(m, s)
+                for m, s in mapping.items():
+                    zs.zadd(m, s)
                 self.set(key, zs)
         return len(mapping)
 
-    def zscore      (self, key: str, member: str) -> Optional[float]:
+    def zscore(self, key: str, member: str) -> float | None:
         """Return score of *member*, or ``None``."""
         d = self.get(key)
         return d.zscore(member) if isinstance(d, SortedSet) else None
 
-    def zrank       (self, key: str, member: str) -> Optional[int]:
+    def zrank(self, key: str, member: str) -> int | None:
         """Return 0-based rank of *member*, or ``None``."""
         d = self.get(key)
         return d.zrank(member) if isinstance(d, SortedSet) else None
 
-    def zcard       (self, key: str) -> int:
+    def zcard(self, key: str) -> int:
         """Return number of members in sorted set."""
         d = self.get(key)
         return d.zcard() if isinstance(d, SortedSet) else 0
 
-    def zrange      (self, key: str, start: int, end: int, with_scores: bool = False) -> List:
+    def zrange(self, key: str, start: int, end: int, with_scores: bool = False) -> list:
         """Return members in rank range [start, end]."""
         d = self.get(key)
         return d.zrange(start, end, with_scores) if isinstance(d, SortedSet) else []
 
-    def zrangebyscore(self, key: str, min_score: float, max_score: float) -> List[str]:
+    def zrangebyscore(self, key: str, min_score: float, max_score: float) -> list[str]:
         """Return members with scores in [min_score, max_score]."""
         d = self.get(key)
         return d.zrangebyscore(min_score, max_score) if isinstance(d, SortedSet) else []
 
     def zrem(self, key: str, *members: str) -> int:
         """Remove *members* from sorted set. Returns count removed."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
             e = shard.peek(key)
@@ -957,11 +973,11 @@ class ZeroCache:
 
     def zincrby(self, key: str, member: str, amount: float = 1.0) -> float:
         """Increment score of *member* by *amount*."""
-        key         = self._k(key)
+        key = self._k(key)
         shard, lock = self._db.shard_of(key)
         with lock:
-            e         = shard.peek(key)
-            zs        = e.value if e and e.dtype == DataType.ZSET else None
+            e = shard.peek(key)
+            zs = e.value if e and e.dtype == DataType.ZSET else None
             new_score = (zs.zscore(member) or 0.0 if zs else 0.0) + amount
             self.zadd(key, {member: new_score})
             return new_score
@@ -974,58 +990,58 @@ class ZeroCache:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, lambda: fn(*args, **kwargs))
 
-    async def async_get      (self, key: str, default: Any = None) -> Any:
+    async def async_get(self, key: str, default: Any = None) -> Any:
         return await self._run(self.get, key, default)
 
-    async def async_set      (self, key: str, value: Any, ttl: int = 0, **kw: Any) -> bool:
+    async def async_set(self, key: str, value: Any, ttl: int = 0, **kw: Any) -> bool:
         return await self._run(self.set, key, value, ttl=ttl, **kw)
 
-    async def async_delete   (self, *keys: str) -> int:
+    async def async_delete(self, *keys: str) -> int:
         return await self._run(self.delete, *keys)
 
-    async def async_mget     (self, *keys: str) -> List[Any]:
+    async def async_mget(self, *keys: str) -> list[Any]:
         return await self._run(self.mget, *keys)
 
-    async def async_mset     (self, mapping: Dict, ttl: int = 0) -> bool:
+    async def async_mset(self, mapping: dict, ttl: int = 0) -> bool:
         return await self._run(self.mset, mapping, ttl=ttl)
 
-    async def async_hset     (self, key: str, field: str, value: Any, ttl: int = 0) -> bool:
+    async def async_hset(self, key: str, field: str, value: Any, ttl: int = 0) -> bool:
         return await self._run(self.hset, key, field, value, ttl=ttl)
 
-    async def async_hget     (self, key: str, field: str, default: Any = None) -> Any:
+    async def async_hget(self, key: str, field: str, default: Any = None) -> Any:
         return await self._run(self.hget, key, field, default)
 
-    async def async_hgetall  (self, key: str) -> Dict:
+    async def async_hgetall(self, key: str) -> dict:
         return await self._run(self.hgetall, key)
 
-    async def async_lpush    (self, key: str, *values: Any) -> int:
+    async def async_lpush(self, key: str, *values: Any) -> int:
         return await self._run(self.lpush, key, *values)
 
-    async def async_rpush    (self, key: str, *values: Any) -> int:
+    async def async_rpush(self, key: str, *values: Any) -> int:
         return await self._run(self.rpush, key, *values)
 
-    async def async_lpop     (self, key: str, count: int = 1) -> Any:
+    async def async_lpop(self, key: str, count: int = 1) -> Any:
         return await self._run(self.lpop, key, count)
 
-    async def async_rpop     (self, key: str, count: int = 1) -> Any:
+    async def async_rpop(self, key: str, count: int = 1) -> Any:
         return await self._run(self.rpop, key, count)
 
-    async def async_lrange   (self, key: str, start: int, end: int) -> List:
+    async def async_lrange(self, key: str, start: int, end: int) -> list:
         return await self._run(self.lrange, key, start, end)
 
-    async def async_sadd     (self, key: str, *members: Any) -> int:
+    async def async_sadd(self, key: str, *members: Any) -> int:
         return await self._run(self.sadd, key, *members)
 
-    async def async_smembers (self, key: str) -> set:
+    async def async_smembers(self, key: str) -> set:
         return await self._run(self.smembers, key)
 
-    async def async_zadd     (self, key: str, mapping: Dict[str, float]) -> int:
+    async def async_zadd(self, key: str, mapping: dict[str, float]) -> int:
         return await self._run(self.zadd, key, mapping)
 
-    async def async_zrange   (self, key: str, start: int, end: int, with_scores: bool = False) -> List:
+    async def async_zrange(self, key: str, start: int, end: int, with_scores: bool = False) -> list:
         return await self._run(self.zrange, key, start, end, with_scores)
 
-    async def async_incr     (self, key: str, amount: int = 1) -> int:
+    async def async_incr(self, key: str, amount: int = 1) -> int:
         return await self._run(self.incr, key, amount)
 
     # ───────────────────────────────────────────────────────────────────
@@ -1060,32 +1076,30 @@ class ZeroCache:
     def unsubscribe(self, channel: str, queue: asyncio.Queue) -> None:
         """Remove *queue* from *channel* subscribers."""
         if channel in self._subscribers:
-            self._subscribers[channel] = [
-                q for q in self._subscribers[channel] if q is not queue
-            ]
+            self._subscribers[channel] = [q for q in self._subscribers[channel] if q is not queue]
 
     # ───────────────────────────────────────────────────────────────────
     # INTROSPECTION
     # ───────────────────────────────────────────────────────────────────
 
-    def info(self) -> Dict[str, Any]:
+    def info(self) -> dict[str, Any]:
         """Return runtime statistics and configuration summary."""
         with self._stats_lock:
             s = dict(self._stats)
         total = s["hits"] + s["misses"]
         return {
-            "name"         : "ZeroCache",
-            "version"      : self.VERSION,
-            "keys"         : len(self._db),
-            "shards"       : self._db.n,
-            "maxsize"      : sum(sh.maxsize for sh in self._db.shards),
-            "evictions"    : self._db.total_evictions,
+            "name": "ZeroCache",
+            "version": self.VERSION,
+            "keys": len(self._db),
+            "shards": self._db.n,
+            "maxsize": sum(sh.maxsize for sh in self._db.shards),
+            "evictions": self._db.total_evictions,
             "ttl_heap_size": len(self._ttl_heap),
-            "hit_rate"     : f"{s['hits'] / total:.1%}" if total else "N/A",
-            "persist_path" : str(self.persist_path),
-            "compress"     : self.compress,
-            "track_hits"   : self.track_hits,
-            "intern_keys"  : self.intern_keys,
+            "hit_rate": f"{s['hits'] / total:.1%}" if total else "N/A",
+            "persist_path": str(self.persist_path),
+            "compress": self.compress,
+            "track_hits": self.track_hits,
+            "intern_keys": self.intern_keys,
             **s,
         }
 
@@ -1101,12 +1115,18 @@ class ZeroCache:
             self._bg_thread.join(timeout=5)
         logger.info("[ZeroCache] Shutdown complete.")
 
-    def __len__     (self)      -> int:  return len(self._db)
-    def __contains__(self, key: str) -> bool: return self.exists(key) > 0
-    def __repr__    (self)      -> str:
-        return (f"ZeroCache(v{self.VERSION}, keys={len(self._db)}, "
-                f"shards={self._db.n}, track_hits={self.track_hits}, "
-                f"intern_keys={self.intern_keys})")
+    def __len__(self) -> int:
+        return len(self._db)
+
+    def __contains__(self, key: str) -> bool:
+        return self.exists(key) > 0
+
+    def __repr__(self) -> str:
+        return (
+            f"ZeroCache(v{self.VERSION}, keys={len(self._db)}, "
+            f"shards={self._db.n}, track_hits={self.track_hits}, "
+            f"intern_keys={self.intern_keys})"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -2,30 +2,22 @@
 
 from __future__ import annotations
 
-import pytest
 from zerocache import ZeroCache
 
 
 class TestPipelineSync:
     def test_pipeline_set_get(self, cache: ZeroCache):
-        results = (
-            cache.pipeline()
-                .set("a", 1)
-                .set("b", 2)
-                .get("a")
-                .get("b")
-                .execute()
-        )
+        results = cache.pipeline().set("a", 1).set("b", 2).get("a").get("b").execute()
         assert results == [True, True, 1, 2]
 
     def test_pipeline_chained(self, cache: ZeroCache):
         results = (
             cache.pipeline()
-                .set("counter", 0)
-                .incr("counter")
-                .incr("counter")
-                .get("counter")
-                .execute()
+            .set("counter", 0)
+            .incr("counter")
+            .incr("counter")
+            .get("counter")
+            .execute()
         )
         assert results[-1] == 2
 
@@ -46,13 +38,7 @@ class TestPipelineSync:
         assert results == []
 
     def test_pipeline_list_ops(self, cache: ZeroCache):
-        results = (
-            cache.pipeline()
-                .rpush("lst", "a")
-                .rpush("lst", "b")
-                .rpush("lst", "c")
-                .execute()
-        )
+        results = cache.pipeline().rpush("lst", "a").rpush("lst", "b").rpush("lst", "c").execute()
         assert results == [1, 2, 3]
 
     def test_pipeline_delete(self, cache: ZeroCache):
@@ -64,10 +50,5 @@ class TestPipelineSync:
 
 class TestPipelineAsync:
     async def test_async_execute(self, cache: ZeroCache):
-        results = await (
-            cache.pipeline()
-                .set("async_a", 100)
-                .get("async_a")
-                .async_execute()
-        )
+        results = await cache.pipeline().set("async_a", 100).get("async_a").async_execute()
         assert results == [True, 100]

@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from collections.abc import Callable
 from functools import wraps
-from typing    import Any, Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from zerocache._core import ZeroCache
@@ -28,9 +29,9 @@ __all__ = ["cached"]
 
 
 def cached(
-    key_prefix: str              = "",
-    ttl:        int              = 300,
-    cache:      "Optional[ZeroCache]" = None,
+    key_prefix: str = "",
+    ttl: int = 300,
+    cache: ZeroCache | None = None,
 ) -> Callable:
     """Cache decorator for sync and async functions.
 
@@ -64,8 +65,9 @@ def cached(
         @wraps(fn)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             from zerocache._core import _default
-            _c  = _default if cache is None else cache
-            h   = hashlib.blake2s(
+
+            _c = _default if cache is None else cache
+            h = hashlib.blake2s(
                 (str(args) + str(sorted(kwargs.items()))).encode(),
                 digest_size=8,
             ).hexdigest()
@@ -79,8 +81,9 @@ def cached(
         @wraps(fn)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             from zerocache._core import _default
-            _c  = _default if cache is None else cache
-            h   = hashlib.blake2s(
+
+            _c = _default if cache is None else cache
+            h = hashlib.blake2s(
                 (str(args) + str(sorted(kwargs.items()))).encode(),
                 digest_size=8,
             ).hexdigest()

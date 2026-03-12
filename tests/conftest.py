@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from zerocache import ZeroCache
 
 
@@ -16,7 +17,7 @@ def cache(tmp_path):
     c = ZeroCache(
         persist_path=str(tmp_path / ".zerocache_test.db"),
         load_on_start=False,
-        auto_save_interval=9999,   # disable auto-save during tests
+        auto_save_interval=9999,  # disable auto-save during tests
     )
     yield c
     c.flush()

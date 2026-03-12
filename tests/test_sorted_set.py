@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from zerocache import ZeroCache
 
 
@@ -10,7 +9,7 @@ class TestZadd:
     def test_zadd_and_zscore(self, cache: ZeroCache):
         cache.zadd("zs", {"alice": 1.0, "bob": 2.0})
         assert cache.zscore("zs", "alice") == 1.0
-        assert cache.zscore("zs", "bob")   == 2.0
+        assert cache.zscore("zs", "bob") == 2.0
 
     def test_zadd_update_score(self, cache: ZeroCache):
         cache.zadd("zs", {"alice": 1.0})
@@ -24,8 +23,8 @@ class TestZadd:
 class TestZrank:
     def test_zrank_ascending(self, cache: ZeroCache):
         cache.zadd("zs", {"low": 1.0, "mid": 5.0, "high": 10.0})
-        assert cache.zrank("zs", "low")  == 0
-        assert cache.zrank("zs", "mid")  == 1
+        assert cache.zrank("zs", "low") == 0
+        assert cache.zrank("zs", "mid") == 1
         assert cache.zrank("zs", "high") == 2
 
     def test_zrank_missing_member(self, cache: ZeroCache):
